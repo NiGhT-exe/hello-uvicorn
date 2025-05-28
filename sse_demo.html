@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FastAPI Real-Time Communication Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .event-log {
+            height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            background-color: #f9f9f9;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .chat-log {
+            height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            background-color: #f9f9f9;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        .event-item {
+            margin-bottom: 5px;
+            padding: 5px;
+            border-left: 3px solid #007bff;
+            background-color: white;
+        }
+        .chat-message {
+            margin-bottom: 8px;
+            padding: 8px;
+            border-radius: 6px;
+            background-color: white;
+            border-left: 3px solid #007bff;
+        }
+        .chat-message.system { border-left-color: #6c757d; background-color: #f8f9fa; }
+        .chat-message.user_joined { border-left-color: #28a745; }
+        .chat-message.user_left { border-left-color: #dc3545; }
+        .chat-message.chat_message { border-left-color: #007bff; }
+        .event-item.notification { border-left-color: #28a745; }
+        .event-item.price-update { border-left-color: #ffc107; }
+        .event-item.message { border-left-color: #17a2b8; }
+        .event-item.error { border-left-color: #dc3545; }
+        .controls {
+            margin-bottom: 10px;
+        }
+        .chat-controls {
+            margin-bottom: 10px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .chat-input {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .chat-input input[type="text"] {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .chat-input input[type="text"]:disabled {
+            background-color: #f5f5f5;
+        }
+        button {
+            padding: 8px 16px;
+            margin-right: 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        button.stop {
+            background-color: #dc3545;
+        }
+        button.stop:hover {
+            background-color: #c82333;
+        }
+        button.send {
+            background-color: #28a745;
+        }
+        button.send:hover {
+            background-color: #218838;
+        }
+        .status {
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        .connected { color: #28a745; }
+        .disconnected { color: #dc3545; }
+        .username-input {
+            width: 120px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .room-input {
+            width: 80px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>FastAPI Real-Time Communication Demo</h1>
+    <p>This demo showcases both Server-Sent Events (SSE) for one-way streaming and WebSockets for bidirectional communication.</p>
+    
+    <div class="container">
+        <h2>WebSocket Chat (Bidirectional)</h2>
+        <div class="chat-controls">
+            <label>Username:</label>
+            <input type="text" id="username" class="username-input" value="User" />
+            <label>Room:</label>
+            <input type="text" id="roomId" class="room-input" value="demo" />
+            <button onclick="connectWebSocketChat()">Connect</button>
+            <button onclick="disconnectWebSocketChat()" class="stop">Disconnect</button>
+            <span id="wsStatus" class="status disconnected">Disconnected</span>
+        </div>
+        <div id="chatMessages" class="chat-log"></div>
+        <div class="chat-input">
+            <input type="text" id="messageInput" placeholder="Type your message..." disabled onkeypress="handleKeyPress(event)" />
+            <button onclick="sendMessage()" class="send" id="sendButton" disabled>Send</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <h2>Basic Time Stream (SSE)</h2>
+        <div class="controls">
+            <button onclick="startBasicStream()">Start Stream</button>
+            <button onclick="stopBasicStream()" class="stop">Stop Stream</button>
+            <span id="basicStatus" class="status disconnected">Disconnected</span>
+        </div>
+        <div id="basicEvents" class="event-log"></div>
+    </div>
+
+    <div class="container">
+        <h2>Notifications Stream (SSE)</h2>
+        <div class="controls">
+            <button onclick="startNotificationStream()">Start Notifications</button>
+            <button onclick="stopNotificationStream()" class="stop">Stop Notifications</button>
+            <span id="notificationStatus" class="status disconnected">Disconnected</span>
+        </div>
+        <div id="notificationEvents" class="event-log"></div>
+    </div>
+
+    <div class="container">
+        <h2>Data Feed Stream (SSE - Simulated Stock Prices)</h2>
+        <div class="controls">
+            <button onclick="startDataFeedStream()">Start Data Feed</button>
+            <button onclick="stopDataFeedStream()" class="stop">Stop Data Feed</button>
+            <span id="dataFeedStatus" class="status disconnected">Disconnected</span>
+        </div>
+        <div id="dataFeedEvents" class="event-log"></div>
+    </div>
+
+    <script>
+        let eventSources = {};
+        let chatWebSocket = null;
+
+        function addEventToLog(containerId, content, eventType = '') {
+            const container = document.getElementById(containerId);
+            const eventDiv = document.createElement('div');
+            eventDiv.className = `event-item ${eventType}`;
+            eventDiv.innerHTML = content;
+            container.appendChild(eventDiv);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function addChatMessage(data) {
+            const container = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `chat-message ${data.type}`;
+            
+            let content = '';
+            switch(data.type) {
+                case 'system':
+                    content = `<strong style="color: #6c757d;">System:</strong> ${data.message}`;
+                    break;
+                case 'user_joined':
+                    content = `<strong style="color: #28a745;">📥 ${data.message}</strong> (Users: ${data.user_count})`;
+                    break;
+                case 'user_left':
+                    content = `<strong style="color: #dc3545;">📤 ${data.message}</strong> (Users: ${data.user_count})`;
+                    break;
+                case 'chat_message':
+                    content = `<strong>${data.user}:</strong> ${data.message}<br><small>${new Date(data.timestamp).toLocaleTimeString()}</small>`;
+                    break;
+                default:
+                    content = `<strong>${data.type}:</strong> ${data.message}`;
+            }
+            
+            messageDiv.innerHTML = content;
+            container.appendChild(messageDiv);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function updateStatus(statusId, isConnected) {
+            const statusElement = document.getElementById(statusId);
+            statusElement.textContent = isConnected ? 'Connected' : 'Disconnected';
+            statusElement.className = `status ${isConnected ? 'connected' : 'disconnected'}`;
+        }
+
+        // WebSocket Chat Functions
+        function connectWebSocketChat() {
+            if (chatWebSocket) {
+                chatWebSocket.close();
+            }
+
+            const roomId = document.getElementById('roomId').value || 'demo';
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/chat/${roomId}`;
+            
+            chatWebSocket = new WebSocket(wsUrl);
+
+            chatWebSocket.onopen = function(event) {
+                updateStatus('wsStatus', true);
+                document.getElementById('messageInput').disabled = false;
+                document.getElementById('sendButton').disabled = false;
+                addChatMessage({
+                    type: 'system',
+                    message: 'Connected to WebSocket chat',
+                    timestamp: new Date().toISOString()
+                });
+            };
+
+            chatWebSocket.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                addChatMessage(data);
+            };
+
+            chatWebSocket.onerror = function(event) {
+                addChatMessage({
+                    type: 'system',
+                    message: 'WebSocket error occurred',
+                    timestamp: new Date().toISOString()
+                });
+            };
+
+            chatWebSocket.onclose = function(event) {
+                updateStatus('wsStatus', false);
+                document.getElementById('messageInput').disabled = true;
+                document.getElementById('sendButton').disabled = true;
+                addChatMessage({
+                    type: 'system',
+                    message: 'Disconnected from WebSocket chat',
+                    timestamp: new Date().toISOString()
+                });
+            };
+        }
+
+        function disconnectWebSocketChat() {
+            if (chatWebSocket) {
+                chatWebSocket.close();
+                chatWebSocket = null;
+            }
+        }
+
+        function sendMessage() {
+            if (chatWebSocket && chatWebSocket.readyState === WebSocket.OPEN) {
+                const messageInput = document.getElementById('messageInput');
+                const username = document.getElementById('username').value || 'Anonymous';
+                const message = messageInput.value.trim();
+                
+                if (message) {
+                    const messageData = {
+                        user: username,
+                        message: message
+                    };
+                    
+                    chatWebSocket.send(JSON.stringify(messageData));
+                    messageInput.value = '';
+                }
+            }
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        // SSE Functions (keeping existing functionality)
+        function startBasicStream() {
+            if (eventSources.basic) {
+                eventSources.basic.close();
+            }
+            
+            eventSources.basic = new EventSource('/events/stream');
+            
+            eventSources.basic.onopen = function(event) {
+                updateStatus('basicStatus', true);
+                addEventToLog('basicEvents', '<strong>Connection opened</strong>');
+            };
+            
+            eventSources.basic.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                addEventToLog('basicEvents', 
+                    `<strong>Time:</strong> ${data.timestamp}<br>
+                     <strong>Message:</strong> ${data.message}<br>
+                     <strong>Counter:</strong> ${data.counter}`
+                );
+            };
+            
+            eventSources.basic.onerror = function(event) {
+                updateStatus('basicStatus', false);
+                addEventToLog('basicEvents', '<strong style="color: red;">Connection error</strong>', 'error');
+            };
+        }
+
+        function stopBasicStream() {
+            if (eventSources.basic) {
+                eventSources.basic.close();
+                eventSources.basic = null;
+                updateStatus('basicStatus', false);
+                addEventToLog('basicEvents', '<strong>Connection closed</strong>');
+            }
+        }
+
+        function startNotificationStream() {
+            if (eventSources.notification) {
+                eventSources.notification.close();
+            }
+            
+            eventSources.notification = new EventSource('/events/notifications');
+            
+            eventSources.notification.onopen = function(event) {
+                updateStatus('notificationStatus', true);
+                addEventToLog('notificationEvents', '<strong>Connection opened</strong>');
+            };
+            
+            eventSources.notification.addEventListener('notification', function(event) {
+                const data = JSON.parse(event.data);
+                addEventToLog('notificationEvents', 
+                    `<strong>Type:</strong> ${data.type}<br>
+                     <strong>Message:</strong> ${data.message}<br>
+                     <strong>Time:</strong> ${data.timestamp}`,
+                    'notification'
+                );
+            });
+            
+            eventSources.notification.onerror = function(event) {
+                updateStatus('notificationStatus', false);
+                addEventToLog('notificationEvents', '<strong style="color: red;">Connection error</strong>', 'error');
+            };
+        }
+
+        function stopNotificationStream() {
+            if (eventSources.notification) {
+                eventSources.notification.close();
+                eventSources.notification = null;
+                updateStatus('notificationStatus', false);
+                addEventToLog('notificationEvents', '<strong>Connection closed</strong>');
+            }
+        }
+
+        function startDataFeedStream() {
+            if (eventSources.dataFeed) {
+                eventSources.dataFeed.close();
+            }
+            
+            eventSources.dataFeed = new EventSource('/events/data-feed');
+            
+            eventSources.dataFeed.onopen = function(event) {
+                updateStatus('dataFeedStatus', true);
+                addEventToLog('dataFeedEvents', '<strong>Connection opened</strong>');
+            };
+            
+            eventSources.dataFeed.addEventListener('price-update', function(event) {
+                const data = JSON.parse(event.data);
+                const changeColor = data.change >= 0 ? 'green' : 'red';
+                const changeSymbol = data.change >= 0 ? '+' : '';
+                
+                addEventToLog('dataFeedEvents', 
+                    `<strong>${data.symbol}:</strong> $${data.price} 
+                     <span style="color: ${changeColor}">(${changeSymbol}${data.change})</span><br>
+                     <strong>Volume:</strong> ${data.volume}<br>
+                     <strong>Time:</strong> ${data.timestamp}`,
+                    'price-update'
+                );
+            });
+            
+            eventSources.dataFeed.onerror = function(event) {
+                updateStatus('dataFeedStatus', false);
+                addEventToLog('dataFeedEvents', '<strong style="color: red;">Connection error</strong>', 'error');
+            };
+        }
+
+        function stopDataFeedStream() {
+            if (eventSources.dataFeed) {
+                eventSources.dataFeed.close();
+                eventSources.dataFeed = null;
+                updateStatus('dataFeedStatus', false);
+                addEventToLog('dataFeedEvents', '<strong>Connection closed</strong>');
+            }
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', function() {
+            Object.values(eventSources).forEach(source => {
+                if (source) source.close();
+            });
+            if (chatWebSocket) {
+                chatWebSocket.close();
+            }
+        });
+    </script>
+</body>
+</html> 
