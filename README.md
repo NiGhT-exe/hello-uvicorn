@@ -15,7 +15,7 @@ A comprehensive FastAPI application demonstrating real-time communication using 
 ### Using Docker (Recommended)
 ```bash
 # Clone the repository
-git clone <your-repo-url>
+git clone https://github.com/NiGhT-exe/hello-uvicorn.git
 cd hello-uvicorn
 
 # Start with docker-compose
@@ -25,7 +25,7 @@ docker-compose up --build
 ### Local Development
 ```bash
 # Clone the repository
-git clone <your-repo-url>
+git clone https://github.com/NiGhT-exe/hello-uvicorn.git
 cd hello-uvicorn
 
 # Create virtual environment and install dependencies
